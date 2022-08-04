@@ -10,8 +10,8 @@ const DEFAULT_YAML = 'Default TestSpec for Android Appium Java TestNG v3.0'
 // const ACCESS_KEY = "None";
 // const SECRET_KEY = "None";
 
-// AWS.config = new AWS.Config();
-// AWS.config.credentials = new AWS.Credentials(process.env.ACCESS_KEY, process.env.SECRET_KEY);
+AWS.config = new AWS.Config();
+AWS.config.credentials = new AWS.Credentials(process.env.ACCESS_KEY, process.env.SECRET_KEY);
 
 var devicefarm = new AWS.DeviceFarm({ region: REGION });
 function get_project_arn(name) {
@@ -50,13 +50,9 @@ function get_upload_arn(project_arn,name){
             if (err) {
                 reject(err)
             } else {
-                console.log(data.uploads.filter(function (upload) {
-                    return upload.name === name
-                }))
                 var uploadArn = data.uploads.filter(function (upload) {
                     return upload.name === name
                 })[0].arn
-                console.log(uploadArn)
                 resolve(uploadArn)
             }
         })
@@ -78,19 +74,33 @@ function get_yaml_arn(project_arn,name){
     })
 }
 
+function get_run_result(run_arn) {
+    return new Promise((resolve, reject) => {
+        devicefarm.getRun({arn: run_arn}, function (err, data) {
+            if (err) {
+                reject(err)
+            } else {
+                resolve(data)
+            }
+        })
+    })
+}
+
 function _poll_until_run_done(run_arn) {
     return new Promise((resolve, reject) => {
         devicefarm.getRun({arn: run_arn}, function (err, data) {
             if (err) {
                 reject(err)
             } else {
-                if (data.run.status === 'PENDING' || data.run.status === 'RUNNING' || data.run.status === 'SCHEDULING') {
+                if (data.run.status !== 'COMPLETED') {
                     console.log('Current status: ' + data.run.status)
                     setTimeout(function () {
                         _poll_until_run_done(run_arn)
                     }, 5000)
                 } else {
-                    console.log(data)
+                    console.log('Current status: ' + data.run.status)
+                    console.log('Current result: ' + data.run.result)
+                    if (data.run.result !== 'PASSED') process.exit(1)
                     resolve(data)
                 }
             }
@@ -145,9 +155,9 @@ async function test() {
         yaml = yaml_arn,
     );
 
-    var run_data = await _poll_until_run_done(run_arn);
+    await _poll_until_run_done(run_arn)
+    var run_data = await get_run_result(run_arn)
     console.log(run_data);
-
 }
 
 test()
